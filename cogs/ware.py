@@ -47,7 +47,7 @@ class WordWareCog(commands.Cog):
             self.cooldown.remove(user)
 
     async def fetch_user_messages(
-        self, channel: discord.TextChannel, user: discord.Member, limit: int = 50
+        self, channel: discord.TextChannel, user: discord.Member, limit: int = 10
     ) -> list[discord.Message]:
         """Fetches the latest messages from a user in a given channel."""
         messages = []
@@ -83,40 +83,42 @@ class WordWareCog(commands.Cog):
             return
 
         self.start_cooldown(ctx.author)
-        await ctx.defer()
-
-        # Randomly select an API key for load balancing
-        genai.configure(
-            api_key=random.choice(
-                [
-                    os.getenv("gemini1"),
-                    os.getenv("gemini2"),
-                    os.getenv("gemini3"),
-                    os.getenv("gemini4"),
-                ]
+        try:
+            await ctx.defer()
+    
+            # Randomly select an API key for load balancing
+            genai.configure(
+                api_key=random.choice(
+                    [
+                        os.getenv("gemini1"),
+                        os.getenv("gemini2"),
+                        os.getenv("gemini3"),
+                        os.getenv("gemini4"),
+                    ]
+                )
             )
-        )
-
-        # Fetch and format user messages
-        messages = await self.fetch_user_messages(ctx.channel, user)
-        if not messages:
-            await ctx.reply("指定されたユーザーのメッセージが見つかりませんでした。")
+    
+            # Fetch and format user messages
+            messages = await self.fetch_user_messages(ctx.channel, user)
+            if not messages:
+                await ctx.reply("指定されたユーザーのメッセージが見つかりませんでした。")
+                self.end_cooldown(ctx.author)
+                return
+    
+            formatted_messages = self.format_messages(messages)
+    
+            # Generate content using the AI model
+            prompt = f"""
+                {user.display_name} (@{user.name}) の悪いところを文章にしてください。ユーザー名やユーザーIDにも触れてください。
+                このユーザーのメッセージ一覧は以下のとおりです。
+                {formatted_messages}
+            """
+            response = await asyncio.to_thread(self.model.generate_content, prompt)
+    
+            # Reply with the generated content
+            await ctx.reply(response.text)
+        finally:
             self.end_cooldown(ctx.author)
-            return
-
-        formatted_messages = self.format_messages(messages)
-
-        # Generate content using the AI model
-        prompt = f"""
-            {user.display_name} (@{user.name}) の悪いところを文章にしてください。ユーザー名やユーザーIDにも触れてください。
-            このユーザーのメッセージ一覧は以下のとおりです。
-            {formatted_messages}
-        """
-        response = await asyncio.to_thread(self.model.generate_content, prompt)
-
-        # Reply with the generated content
-        await ctx.reply(response.text)
-        self.end_cooldown(ctx.author)
 
 
 async def setup(bot: commands.Bot):
