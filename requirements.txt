@@ -1,4 +1,4 @@
 discord.py
 google-generativeai
 python-dotenv
-fastapi
+fastapi[all]
