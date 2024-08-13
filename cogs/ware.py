@@ -47,7 +47,7 @@ class WordWareCog(commands.Cog):
         )
         messages: list[discord.Message] = []
         before = datetime.now()
-        while len(messages) > 0:
+        while len(messages) < 50:
             async for message in ctx.channel.history(limit=200, before=before):
                 if message.author == user:
                     messages.append(message)
