@@ -16,6 +16,12 @@ intents.message_content = True
 bot = commands.Bot("wordware#", intents=intents)
 
 
+@bot.command("sync")
+async def sync(ctx: commands.Context):
+    await bot.tree.sync()
+    await ctx.message.delete()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(bot.start(os.getenv("discord")))
