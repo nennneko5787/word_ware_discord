@@ -17,24 +17,75 @@ class WordWareCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         super().__init__()
         self.bot = bot
+        self.setup_generative_ai()
+        self.cooldown = []
+
+    def setup_generative_ai(self):
+        """Sets up the Google Generative AI model with safety settings."""
         genai.configure(api_key=os.getenv("gemini1"))
-        safety = [
+        safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
-        self.model: genai.GenerativeModel = genai.GenerativeModel(
-            "gemini-1.5-pro-exp-0801", safety_settings=safety
+        self.model = genai.GenerativeModel(
+            "gemini-1.5-pro-exp-0801", safety_settings=safety_settings
         )
-        self.cooldown: list[discord.Member] = []
+
+    def is_on_cooldown(self, user: discord.Member) -> bool:
+        """Checks if a user is currently on cooldown."""
+        return user in self.cooldown
+
+    def start_cooldown(self, user: discord.Member):
+        """Adds a user to the cooldown list."""
+        self.cooldown.append(user)
+
+    def end_cooldown(self, user: discord.Member):
+        """Removes a user from the cooldown list."""
+        if user in self.cooldown:
+            self.cooldown.remove(user)
+
+    async def fetch_user_messages(
+        self, channel: discord.TextChannel, user: discord.Member, limit: int = 50
+    ) -> list[discord.Message]:
+        """Fetches the latest messages from a user in a given channel."""
+        messages = []
+        before = datetime.now()
+        while len(messages) < limit:
+            async for message in channel.history(limit=200, before=before):
+                if (
+                    not message.content.startswith("wordware#wordware")
+                    and message.author.id == user.id
+                ):
+                    messages.insert(0, message)
+            if messages:
+                before = messages[0].created_at
+        return messages
+
+    def format_messages(self, messages: list[discord.Message]) -> str:
+        """Formats messages into a string for AI processing."""
+        return (
+            "「"
+            + "」「".join(
+                [
+                    f"{message.content}\n> (replyed to {message.reference.resolved.author.display_name if message.reference else 'None'} (@{message.reference.resolved.author.name if message.reference else 'None'})) {message.reference.resolved.content if message.reference else 'None'}"
+                    for message in messages
+                ]
+            )
+            + "」"
+        )
 
     @commands.hybrid_command(name="wordware", description="最新50件のメッセージから")
     async def wordware(self, ctx: commands.Context, user: discord.Member):
-        if ctx.author in self.cooldown:
+        if self.is_on_cooldown(ctx.author):
             await ctx.reply("クールダウン中")
-        self.cooldown.append(ctx.author)
+            return
+
+        self.start_cooldown(ctx.author)
         await ctx.defer()
+
+        # Randomly select an API key for load balancing
         genai.configure(
             api_key=random.choice(
                 [
@@ -45,26 +96,27 @@ class WordWareCog(commands.Cog):
                 ]
             )
         )
-        messages: list[discord.Message] = []
-        before = datetime.now()
-        while len(messages) < 50:
-            async for message in ctx.channel.history(limit=200, before=before):
-                if message.author == user:
-                    messages.append(message)
-            if len(messages) > 0:
-                before = messages[-1].created_at
-        twiito = "「" + "」「".join([message.content for message in messages]) + "」"
 
-        response = await asyncio.to_thread(
-            self.model.generate_content,
-            f"""
-                {user.display_name} (@{user.name}) の悪いところを文章にしてください。ユーザー名やユーザーIDにも触れてください。
-                このユーザーのメッセージ一覧は以下のとおりです。
-                {twiito}
-            """,
-        )
+        # Fetch and format user messages
+        messages = await self.fetch_user_messages(ctx.channel, user)
+        if not messages:
+            await ctx.reply("指定されたユーザーのメッセージが見つかりませんでした。")
+            self.end_cooldown(ctx.author)
+            return
+
+        formatted_messages = self.format_messages(messages)
+
+        # Generate content using the AI model
+        prompt = f"""
+            {user.display_name} (@{user.name}) の悪いところを文章にしてください。ユーザー名やユーザーIDにも触れてください。
+            このユーザーのメッセージ一覧は以下のとおりです。
+            {formatted_messages}
+        """
+        response = await asyncio.to_thread(self.model.generate_content, prompt)
+
+        # Reply with the generated content
         await ctx.reply(response.text)
-        self.cooldown.remove(ctx.author)
+        self.end_cooldown(ctx.author)
 
 
 async def setup(bot: commands.Bot):

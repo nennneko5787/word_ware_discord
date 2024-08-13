@@ -11,6 +11,8 @@ if os.path.isfile(".env"):
 
     load_dotenv()
 
+discord.utils.setup_logging()
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot("wordware#", intents=intents)
