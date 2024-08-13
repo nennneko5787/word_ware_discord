@@ -27,9 +27,13 @@ class WordWareCog(commands.Cog):
         self.model: genai.GenerativeModel = genai.GenerativeModel(
             "gemini-1.5-pro-exp-0801", safety_settings=safety
         )
+        self.cooldown: list[discord.Member] = []
 
     @commands.hybrid_command(name="wordware", description="最新50件のメッセージから")
     async def wordware(self, ctx: commands.Context, user: discord.Member):
+        if ctx.author in self.cooldown:
+            await ctx.reply("クールダウン中")
+        self.cooldown.append(ctx.author)
         await ctx.defer()
         genai.configure(
             api_key=random.choice(
@@ -62,6 +66,7 @@ class WordWareCog(commands.Cog):
             """,
         )
         await ctx.reply(response.text)
+        self.cooldown.remove(ctx.author)
 
 
 async def setup(bot: commands.Bot):
