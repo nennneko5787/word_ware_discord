@@ -53,8 +53,6 @@ class WordWareCog(commands.Cog):
                     messages.append(message)
             if len(messages) < 0:
                 before = messages[-1].created_at
-            else:
-                continue
         twiito = "「" + "」「".join([message.content for message in messages]) + "」"
 
         response = await asyncio.to_thread(
