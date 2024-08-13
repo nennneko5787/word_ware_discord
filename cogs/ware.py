@@ -61,6 +61,7 @@ class WordWareCog(commands.Cog):
                     messages.insert(0, message)
             if messages:
                 before = messages[0].created_at
+            await asyncio.sleep(1)
         return messages
 
     def format_messages(self, messages: list[discord.Message]) -> str:
