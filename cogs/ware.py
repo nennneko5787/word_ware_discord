@@ -47,11 +47,11 @@ class WordWareCog(commands.Cog):
         )
         messages: list[discord.Message] = []
         before = datetime.now()
-        while len(messages) < 0:
+        while len(messages) > 0:
             async for message in ctx.channel.history(limit=200, before=before):
                 if message.author == user:
                     messages.append(message)
-            if len(messages) < 0:
+            if len(messages) > 0:
                 before = messages[-1].created_at
         twiito = "「" + "」「".join([message.content for message in messages]) + "」"
 
